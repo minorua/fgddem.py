@@ -172,7 +172,6 @@ def translate_zip(src_file, dst_file, driver, create_options = [], replace_nodat
     return "Zip file includes no xml file: " + src_file
 
   if len(demlist) == 1:
-    #TODO
     os.rename(demlist[0], dst_file)
   else:
     # create merge command
