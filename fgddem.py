@@ -1,22 +1,28 @@
 #!/usr/bin/env python
 # name      : fgddem.py
-# purpose   : translates Digital Elevation Model of Fundamental Geospatial Data provided by GSI into GeoTIFF
+# purpose   : translates digital elevation model of Fundamental Geospatial Data provided by GSI
+#             into a GDAL supported format (write access).
 # copyright : (c) 2012, Minoru Akagi
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
 
-script_version = "0.6"
+script_version = "0.7"
 
 import sys, os
 import datetime
@@ -43,33 +49,22 @@ verbose = 0
 quiet = 0
 debug_mode = 0
 
-def translate_jpgis_gml(src_document, dest_file, driver, create_options = [], replace_nodata_by_zero = 0):
-  """ translates JPGIS (GML) DEM into GeoTIFF. JPGIS is not supported. """
 
-  # read lines and get row range of tuple list
-  lines = src_document.split("\n")    # \r character at line ending is no problem: float("0.01\r") = 0.01
-  num_lines = len(lines)
-  l1 = None
-  l2 = None
-  for i in range(num_lines):
-    if lines[i].find("<gml:tupleList>") != -1:
-      l1 = i + 1    # top of inner tupleList
-      break
-  for i in range(num_lines - 1, -1, -1):
-    if lines[i].find("</gml:tupleList>") != -1:
-      l2 = i - 1    # bottom of inner tupleList
-      break
-  if l1 is None or l2 is None:
-    return "Source file format isn't JPGIS (GML)"
+def translate_jpgis_gml(text, dest_file, driver, create_options=None, replace_nodata_by_zero=False):
+  """translates JPGIS (GML) DEM into a GDAL supported format (write access)."""
 
-  hf = "\n".join(lines[:l1] + lines[l2 + 1:])
-  if debug_mode:
-    print "l1: %d l2: %d" % (l1, l2)
-    print hf
+  create_options = create_options or []
+
+  # split document into 3 parts - header, body (tuple list) and footer
+  header, body = text.split("<gml:tupleList>", 1)
+  body, footer = body.rsplit("</gml:tupleList>", 1)
 
   # parse xml
-  # minidom doesn't support Shift_JIS encoding (2012-03-08)
-  doc = minidom.parseString(hf.decode("Shift_JIS").encode("UTF-8").replace("Shift_JIS", "UTF-8"))
+  hf = header + footer
+  if "Shift_JIS" in header.split("\n", 1)[0]:
+    # minidom doesn't support Shift_JIS encoding (2012-03-08)
+    hf = hf.decode("Shift_JIS").encode("UTF-8").replace("Shift_JIS", "UTF-8")
+  doc = minidom.parseString(hf)
   lowerCorner = doc.getElementsByTagName("gml:lowerCorner")[0].childNodes[0].data.split(" ")
   upperCorner = doc.getElementsByTagName("gml:upperCorner")[0].childNodes[0].data.split(" ")
   lry = float2(lowerCorner[0])
@@ -110,19 +105,21 @@ def translate_jpgis_gml(src_document, dest_file, driver, create_options = [], re
   narray.fill(nodata_value)
 
   # read tuple list
-  num_tuples = l2 - l1 + 1
+  tuples = body.strip().split("\n")    # no problem with \r character at line end: float("0.01\r") = 0.01
+  num_tuples = len(tuples)
   i = 0
   sx = startX
   for y in range(startY, ysize):
     for x in range(sx, xsize):
       if i < num_tuples:
-        vals = lines[i + l1].split(",")
+        vals = tuples[i].split(",")
         if len(vals) == 2 and vals[1].find("-99") == -1:
           narray[y][x] = float(vals[1])
         i += 1
       else:
         break
-    if i == num_tuples: break
+    if i == num_tuples:
+      break
     sx = 0
 
   # write array
@@ -143,7 +140,8 @@ def translate_jpgis_gml(src_document, dest_file, driver, create_options = [], re
     print "start point : %d, %d\n" % (startX, startY)
   return 0
 
-def translate_zip(src_file, dst_file, driver, create_options = [], replace_nodata_by_zero = 0):
+
+def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodata_by_zero=False):
   if not os.path.isfile(src_file):
     return "Source is not a file: " + src_file
 
@@ -152,18 +150,18 @@ def translate_zip(src_file, dst_file, driver, create_options = [], replace_nodat
   os.makedirs(temp_dir)
 
   # open zip file and translate xml files
-  dst_root = os.path.splitext(dst_file)[0]
   zf = zipfile.ZipFile(src_file, mode="r")
   namelist = zf.namelist()
   demlist = []
 
   if not quiet and not verbose:
     progress(0.0)
+
   for i, name in enumerate(namelist):
     if name[-4:].lower() == ".xml" and not "meta" in name:
       tif_name = os.path.join(temp_dir, os.path.basename(name) + ".tif")
       with zf.open(name) as f:
-        translate_jpgis_gml(f.read(), tif_name, driver, [], replace_nodata_by_zero)
+        translate_jpgis_gml(f.read(), tif_name, driver, create_options, replace_nodata_by_zero)
       demlist.append(tif_name)
     if not quiet and not verbose:
       progress((i + 1.) / len(namelist))
@@ -196,11 +194,16 @@ def translate_zip(src_file, dst_file, driver, create_options = [], replace_nodat
         f.write("\n".join(demlist))
         f.write("\n")
 
-      merge_command = "gdal_merge%s%s -o %s --optfile %s" % (gdal_merge_ext, gdal_merge_options, dst_file, demlist_filename)
+      merge_command = 'gdal_merge%s%s -o "%s" --optfile %s' % (gdal_merge_ext,
+                                                               gdal_merge_options,
+                                                               dst_file,
+                                                               demlist_filename)
       # TODO: testing in Linux
       # Wildcards cannot be used for arguments now. See http://trac.osgeo.org/gdal/ticket/4542 (2012/04/08)
     else:
-      merge_command = "gdalwarp%s %s %s" % (gdalwarp_options, os.path.join(temp_dir, "*.tif"), dst_file)
+      merge_command = 'gdalwarp%s "%s" "%s"' % (gdalwarp_options,
+                                                os.path.join(temp_dir, "*.tif"),
+                                                dst_file)
 
     # do merge
     if not quiet:
@@ -217,6 +220,7 @@ def translate_zip(src_file, dst_file, driver, create_options = [], replace_nodat
     flush()
   return 0
 
+
 def unzip(src_file, dest=None):
   if os.path.isfile(src_file):
     if dest is None:
@@ -227,11 +231,13 @@ def unzip(src_file, dest=None):
     if verbose:
       print "unzipped : %s" % dest
 
+
 def Usage():
   print "=== Usage ==="
-  print "python fgddem.py [-replace_nodata_by_zero] [-out_dir output_directory] [-q] [-v] src_files*\n"
+  print "python fgddem.py [-replace_nodata_by_zero] [-f format] [-out_dir output_directory] [-q] [-v] src_files*\n"
   print "src_files: The source file name(s). JPGIS(GML) DEM zip/xml files."
   return 0
+
 
 def main(argv=None):
   global verbose, quiet, debug_mode
@@ -239,7 +245,7 @@ def main(argv=None):
   format = "GTiff"
   filenames = []
   out_dir = ""
-  replace_nodata_by_zero = 0
+  replace_nodata_by_zero = False
 
   gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")
   os.putenv("GDAL_FILENAME_IS_UTF8", "NO")  # for merging process
@@ -249,7 +255,10 @@ def main(argv=None):
   while i < len(argv):
     arg = argv[i]
     if arg == "-replace_nodata_by_zero":
-      replace_nodata_by_zero = 1
+      replace_nodata_by_zero = True
+    elif arg == "-f":
+      i += 1
+      format = argv[i]
     elif arg == "-out_dir":
       i += 1
       out_dir = argv[i]
@@ -330,18 +339,23 @@ def main(argv=None):
     print "completed"
   return 0
 
-def float2(str):
+
+def float2(val, min_repeat=6):
+  """Increase number of decimal places of a repeating decimal.
+     e.g. 34.111111 -> 34.1111111111111111"""
+  repeat = 0
   lc = ""
-  for i in range(len(str)):
-    c = str[i]
+  for i in range(len(val)):
+    c = val[i]
     if c == lc:
-      renzoku += 1
-      if renzoku == 6:
-        return float(str[:i+1] + c * 10)
+      repeat += 1
+      if repeat == min_repeat:
+        return float(val[:i+1] + c * 10)
     else:
       lc = c
-      renzoku = 1
-  return float(str)
+      repeat = 1
+  return float(val)
+
 
 if __name__ == "__main__":
   err = main(sys.argv)
