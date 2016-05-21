@@ -194,7 +194,7 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
         f.write("\n".join(demlist))
         f.write("\n")
 
-      merge_command = 'gdal_merge%s%s -o "%s" --optfile %s' % (gdal_merge_ext,
+      merge_command = 'gdal_merge%s%s -o "%s" --optfile "%s"' % (gdal_merge_ext,
                                                                gdal_merge_options,
                                                                dst_file,
                                                                demlist_filename)
