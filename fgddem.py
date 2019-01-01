@@ -23,7 +23,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-script_version = "0.8"
+script_version = "0.9"
 
 import sys, os
 import datetime
@@ -44,6 +44,7 @@ flush = sys.stdout.flush
 
 verbose = 0
 quiet = 0
+USE_GDALWARP = True
 
 
 def translate_jpgis_gml(text, dest_file, driver, create_options=None, replace_nodata_by_zero=False):
@@ -179,7 +180,7 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
       gdal_merge_options += " -a_nodata -9999"
       gdalwarp_options += " -dstnodata -9999"
     re_non_ascii = re.compile(r"[^\x20-\x7E]")
-    if re_non_ascii.search(src_file + dst_file) is None:
+    if not USE_GDALWARP and re_non_ascii.search(src_file + dst_file) is None:
       # write demlist into a file
       demlist_filename = os.path.join(temp_dir, 'demlist.txt')
       with open(demlist_filename, 'w') as f:
