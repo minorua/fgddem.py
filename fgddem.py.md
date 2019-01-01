@@ -42,6 +42,7 @@ GeoTIFFファイルは入力ファイルと同じファイルタイトルで出�
 更新履歴
 --------
 
+* 2019/01/01 Version 0.9 マージにgdalwarpを使用 (gdal_merge.pyはOSGeo4Wのpython3-gdalパッケージに含まれない)。
 * 2018/11/03 Version 0.8 Python 3に移行。
 * 2016/05/21 Version 0.7 ライセンスをMITに変更。コードクリーニング等。
 * 2014/08/17 Version 0.6 xmlファイルが1つのときはマージを行わない。
