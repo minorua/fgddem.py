@@ -30,7 +30,46 @@ document.getElementById('convertBtn').onclick = async function() {
     output.appendChild(document.createElement('br'));
     output.appendChild(dlBtn);
   } else if (file.name.endsWith('.zip')) {
-    output.textContent = 'ZIP対応は今後実装予定です。';
+    output.textContent = 'ZIP展開中...';
+    // JSZipでZIP展開
+    const zip = await JSZip.loadAsync(file);
+    const xmlFiles = Object.keys(zip.files).filter(name => name.match(/\.xml$/i) && !name.toLowerCase().includes('meta'));
+    if (xmlFiles.length === 0) {
+      output.textContent = 'ZIP内にXMLファイルが見つかりません。';
+      return;
+    }
+    output.innerHTML = `<b>${xmlFiles.length}件のXMLファイルが見つかりました。</b><br>`;
+    for (const xmlName of xmlFiles) {
+      const xmlText = await zip.files[xmlName].async('string');
+      let result;
+      try {
+        result = parseJPGISGML(xmlText);
+      } catch (e) {
+        const errDiv = document.createElement('div');
+        errDiv.textContent = `${xmlName}: パース失敗 (${e})`;
+        output.appendChild(errDiv);
+        continue;
+      }
+      const fileDiv = document.createElement('div');
+      fileDiv.textContent = xmlName + ': ';
+      const dlBtn = document.createElement('button');
+      dlBtn.textContent = 'GeoTIFFダウンロード';
+      dlBtn.onclick = async () => {
+        try {
+          const tiffBlob = await createGeoTIFF(result);
+          const url = URL.createObjectURL(tiffBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = xmlName.replace(/\.xml$/i, '.tif');
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (e) {
+          alert('GeoTIFF作成失敗: ' + e);
+        }
+      };
+      fileDiv.appendChild(dlBtn);
+      output.appendChild(fileDiv);
+    }
   } else {
     output.textContent = '対応していないファイル形式です。';
   }
