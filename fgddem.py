@@ -159,6 +159,9 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
     else:
         gdal_merge_ext = ""
         gdal_merge_options = ["-of", output_format]
+        for opt in create_options:
+            gdal_merge_options += ["-co", opt]
+
         gdalwarp_options = list(gdal_merge_options)
 
         if os.name != "nt":   # nt: windows
@@ -285,6 +288,10 @@ def main(argv=None):
         return "Driver %s not found" % args.format
 
     dst_ext = "." + (driver.GetMetadataItem(gdal.DMD_EXTENSIONS) or "unknown").split(" ")[0]
+
+    create_options = []
+    if args.format == "GTiff":
+        create_options += ["COMPRESS=LZW"]
 
     err_count = 0
     for i, src_file in enumerate(filenames):
