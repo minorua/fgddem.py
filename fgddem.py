@@ -37,7 +37,7 @@ def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[
 
     driver = gdal.GetDriverByName(output_format)
     if driver is None:
-        return "Driver %s not found" % output_format
+        return f"Driver {output_format} not found"
 
     # split document into 3 parts - header, body (tuple list) and footer
     header, body = text.split("<gml:tupleList>", 1)
@@ -110,15 +110,15 @@ def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[
     dst_ds.FlushCache()
 
     if VERBOSE:
-        print("file: %s" % dest_file)
-        print("name: %s" % doc.getElementsByTagName("gml:name")[0].childNodes[0].data)
-        print("fid : %s" % doc.getElementsByTagName("fid")[0].childNodes[0].data)
-        print("type: %s" % doc.getElementsByTagName("type")[0].childNodes[0].data)
-        print("mesh: %s" % doc.getElementsByTagName("mesh")[0].childNodes[0].data)
-        print("bounds : %f, %f - %f, %f" % (lry, ulx, uly, lrx))
-        print("cell size : %f, %f" % (psize_x, psize_y))
-        print("size : %d, %d" % (xsize, ysize))
-        print("start point : %d, %d\n" % (startX, startY))
+        print(f"file: {dest_file}")
+        print(f"name: {doc.getElementsByTagName('gml:name')[0].childNodes[0].data}")
+        print(f"fid : {doc.getElementsByTagName('fid')[0].childNodes[0].data}")
+        print(f"type: {doc.getElementsByTagName('type')[0].childNodes[0].data}")
+        print(f"mesh: {doc.getElementsByTagName('mesh')[0].childNodes[0].data}")
+        print(f"bounds : {lry}, {ulx} - {uly}, {lrx}")
+        print(f"cell size : {psize_x}, {psize_y}")
+        print(f"size : {xsize}, {ysize}")
+        print(f"start point : {startX}, {startY}\n")
     return 0
 
 
@@ -128,7 +128,7 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
 
     driver = gdal.GetDriverByName(output_format)
     if driver is None:
-        return "Driver %s not found" % output_format
+        return f"Driver {output_format} not found"
 
     # create temporary directory
     temp_dir = os.path.splitext(dst_file)[0] + "_temp" + datetime.datetime.today().strftime("%Y%m%d%H%M%S")
@@ -199,10 +199,8 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
 
         if not QUIET:
             print("merging")
+            print("command: " + ' '.join(merge_cmd_args))
             flush()
-
-        if VERBOSE:
-            print("execute %s" % " ".join(merge_cmd_args))
 
         subprocess.run(merge_cmd_args)
 
@@ -227,7 +225,7 @@ def unzip(src_file, dest=None):
     zf.close()
 
     if VERBOSE:
-        print("unzipped : %s" % dest)
+        print("unzipped : " + dest)
 
     return True
 
@@ -267,7 +265,7 @@ def main(argv=None):
     for arg in args.src_files:
         f = glob.glob(arg)
         if len(f) == 0:
-            sys.stderr.write("File not found: %s\n" % arg)
+            sys.stderr.write("File not found: " + arg + "\n")
         filenames += f
 
     if len(filenames) == 0:
@@ -281,12 +279,12 @@ def main(argv=None):
     if out_dir and os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
         if VERBOSE:
-            print("Directory has been created: %s" % out_dir)
+            print("Directory has been created: " + out_dir)
 
     # get gdal driver
     driver = gdal.GetDriverByName(args.format)
     if driver is None:
-        return "Driver %s not found" % args.format
+        return f"Driver {args.format} not found"
 
     dst_ext = "." + (driver.GetMetadataItem(gdal.DMD_EXTENSIONS) or "unknown").split(" ")[0]
 
@@ -298,7 +296,7 @@ def main(argv=None):
     for i, src_file in enumerate(filenames):
         if not QUIET:
             if len(filenames) > 1:
-                print("(%d/%d): translating %s" % (i+1, len(filenames), src_file))
+                print("({}/{}) : translating {}".format(i + 1, len(filenames), src_file))
             else:
                 print("translating " + src_file)
             flush()
@@ -321,7 +319,7 @@ def main(argv=None):
             with open(src_file, "r", encoding="utf-8") as f:
                 err = translate_jpgis_gml(f.read(), dst_file, args.format, create_options, args.replace_nodata_by_zero)
         else:
-            err = "Not supported file: %s" % src_file
+            err = "Not supported file: " + src_file
 
         if err:
             sys.stderr.write(err + "\n")
