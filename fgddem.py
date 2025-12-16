@@ -6,6 +6,7 @@
 
 script_version = "0.9"
 
+import argparse
 import datetime
 import os
 import sys
@@ -219,69 +220,62 @@ def unzip(src_file, dest=None):
 
     return True
 
-def Usage():
-    print("=== Usage ===")
-    print("python fgddem.py [-replace_nodata_by_zero] [-f format] [-out_dir output_directory] [-q] [-v] src_files*\n")
-    print("src_files: The source file name(s). JPGIS(GML) DEM zip/xml files.")
-    return 0
-
 
 def main(argv=None):
     global verbose, quiet
 
-    format = "GTiff"
+    # Parse command line arguments using argparse
+    parser = argparse.ArgumentParser(
+        description='Translates digital elevation model of Fundamental Geospatial Data provided by GSI into a GDAL supported format.',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument('src_files', nargs='+', metavar='src_file',
+                        help='The source file name(s). JPGIS(GML) DEM zip/xml files.')
+    parser.add_argument('-replace_nodata_by_zero', action='store_true',
+                        help='Replace nodata value by zero')
+    parser.add_argument('-f', '--format', dest='format', default='GTiff',
+                        help='Output format (default: GTiff)')
+    parser.add_argument('-out_dir', '--out_dir', dest='out_dir', default='',
+                        help='Output directory')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Quiet mode')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Verbose mode')
+    parser.add_argument('-version', '--version', action='version',
+                        version=f'fgddem.py version {script_version}')
+
+    args = parser.parse_args(argv[1:] if argv else None)
+
+    # Set global variables
+    verbose = 1 if args.verbose else 0
+    quiet = 1 if args.quiet else 0
+
+    # Expand wildcards in filenames
     filenames = []
-    out_dir = ""
-    replace_nodata_by_zero = False
-
-    gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")
-    os.putenv("GDAL_FILENAME_IS_UTF8", "NO")  # for merging process
-
-    # Parse command line arguments.
-    i = 1
-    while i < len(argv):
-        arg = argv[i]
-        if arg == "-replace_nodata_by_zero":
-            replace_nodata_by_zero = True
-        elif arg == "-f":
-            i += 1
-            format = argv[i]
-        elif arg == "-out_dir":
-            i += 1
-            out_dir = argv[i]
-        elif arg == "-v":
-            verbose = 1
-        elif arg == "-q":
-            quiet = 1
-        elif arg == "-help" or arg == "--help":
-            Usage()
-            return 0
-        elif arg == "-version":
-            print("fgddem.py version {}".format(script_version))
-            return 0
-        elif arg[:1] == "-":
-            return "Unrecognised command option: %s" % arg
-        else:
-            # expand wildcards
-            f = glob.glob(arg)
-            if len(f) == 0:
-                sys.stderr.write("File not found: %s\n" % arg)
-            filenames += f
-        i = i + 1
+    for arg in args.src_files:
+        f = glob.glob(arg)
+        if len(f) == 0:
+            sys.stderr.write("File not found: %s\n" % arg)
+        filenames += f
 
     if len(filenames) == 0:
         return "No input files selected"
 
+    gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")
+    os.putenv("GDAL_FILENAME_IS_UTF8", "NO")  # for merging process
+
     # create output directory
+    out_dir = args.out_dir
     if out_dir and os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
         if verbose:
             print("Directory has been created: %s" % out_dir)
 
     # get gdal driver
-    driver = gdal.GetDriverByName(format)
+    driver = gdal.GetDriverByName(args.format)
     if driver is None:
-        return "Driver %s not found" % format
+        return "Driver %s not found" % args.format
 
     dst_ext = "." + (driver.GetMetadataItem(gdal.DMD_EXTENSIONS) or "unknown").split(" ")[0]
     err_count = 0
@@ -306,10 +300,10 @@ def main(argv=None):
         # translate zip/xml file
         err = 0
         if ext == ".zip":
-            err = translate_zip(src_file, dst_file, driver, [], replace_nodata_by_zero)
+            err = translate_zip(src_file, dst_file, driver, [], args.replace_nodata_by_zero)
         elif ext == ".xml" and not "meta" in src_file:
             with open(src_file, "r", encoding="utf-8") as f:
-                err = translate_jpgis_gml(f.read(), dst_file, driver, [], replace_nodata_by_zero)
+                err = translate_jpgis_gml(f.read(), dst_file, driver, [], args.replace_nodata_by_zero)
         else:
             err = "Not supported file: %s" % src_file
 
@@ -319,6 +313,7 @@ def main(argv=None):
 
     if not quiet and err_count == 0:
         print("completed")
+
     return 0
 
 
@@ -340,9 +335,12 @@ def float2(val, min_repeat=6):
 
 
 if __name__ == "__main__":
-    err = main(sys.argv)
-    if err:
-        sys.stderr.write(err + "\n")
-        Usage()
+    try:
+        err = main(sys.argv)
+        if err:
+            sys.stderr.write(err + "\n")
+            sys.exit(1)
+        sys.exit(0)
+    except Exception as e:
+        sys.stderr.write(str(e) + "\n")
         sys.exit(1)
-    sys.exit(0)
