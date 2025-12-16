@@ -26,9 +26,10 @@ except:
 
 flush = sys.stdout.flush
 
-verbose = 0
-quiet = 0
+VERBOSE = 0
+QUIET = 0
 USE_GDALWARP = True
+DEFAULT_NODATA_VALUE = -9999
 
 
 def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[], replace_nodata_by_zero=False):
@@ -77,7 +78,7 @@ def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[
     if replace_nodata_by_zero:
         nodata_value = 0.
     else:
-        nodata_value = -9999.
+        nodata_value = float(DEFAULT_NODATA_VALUE)
         rband.SetNoDataValue(nodata_value)
 
     # create an array initialized with nodata value
@@ -108,7 +109,7 @@ def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[
     # make sure that all data have been written
     dst_ds.FlushCache()
 
-    if verbose:
+    if VERBOSE:
         print("file: %s" % dest_file)
         print("name: %s" % doc.getElementsByTagName("gml:name")[0].childNodes[0].data)
         print("fid : %s" % doc.getElementsByTagName("fid")[0].childNodes[0].data)
@@ -138,7 +139,7 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
     namelist = zf.namelist()
     demlist = []
 
-    if not quiet and not verbose:
+    if not QUIET and not VERBOSE:
         progress(0.0)
 
     for i, name in enumerate(namelist):
@@ -147,7 +148,7 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
             with zf.open(name) as f:
                 translate_jpgis_gml(f.read().decode("utf-8"), tif_name, replace_nodata_by_zero=replace_nodata_by_zero)
             demlist.append(tif_name)
-        if not quiet and not verbose:
+        if not QUIET and not VERBOSE:
             progress((i + 1.) / len(namelist))
     zf.close()
 
@@ -167,10 +168,10 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
         if os.name != "nt":   # nt: windows
             gdal_merge_ext = ".py"
 
-        if quiet:
+        if QUIET:
             gdal_merge_options += ["-q"]
 
-        if not verbose:
+        if not VERBOSE:
             gdalwarp_options += ["-q"]
 
         if not replace_nodata_by_zero:
@@ -196,18 +197,18 @@ def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], 
             merge_cmd_args += gdalwarp_options
             merge_cmd_args += [os.path.join(temp_dir, "*.tif"), dst_file]
 
-        if not quiet:
+        if not QUIET:
             print("merging")
             flush()
 
-        if verbose:
+        if VERBOSE:
             print("execute %s" % " ".join(merge_cmd_args))
 
         subprocess.run(merge_cmd_args)
 
     # remove temporary directory
     shutil.rmtree(temp_dir)
-    if not quiet:
+    if not QUIET:
         print("temporary files removed\n")
         flush()
 
@@ -225,14 +226,14 @@ def unzip(src_file, dest=None):
     zf.extractall(dest)
     zf.close()
 
-    if verbose:
+    if VERBOSE:
         print("unzipped : %s" % dest)
 
     return True
 
 
 def main(argv=None):
-    global verbose, quiet
+    global VERBOSE, QUIET
 
     # Parse command line arguments using argparse
     parser = argparse.ArgumentParser(
@@ -258,8 +259,8 @@ def main(argv=None):
     args = parser.parse_args(argv[1:] if argv else None)
 
     # Set global variables
-    verbose = 1 if args.verbose else 0
-    quiet = 1 if args.quiet else 0
+    VERBOSE = 1 if args.verbose else 0
+    QUIET = 1 if args.quiet else 0
 
     # Expand wildcards in filenames
     filenames = []
@@ -279,7 +280,7 @@ def main(argv=None):
     out_dir = args.out_dir
     if out_dir and os.path.exists(out_dir) == False:
         os.makedirs(out_dir)
-        if verbose:
+        if VERBOSE:
             print("Directory has been created: %s" % out_dir)
 
     # get gdal driver
@@ -295,7 +296,7 @@ def main(argv=None):
 
     err_count = 0
     for i, src_file in enumerate(filenames):
-        if not quiet:
+        if not QUIET:
             if len(filenames) > 1:
                 print("(%d/%d): translating %s" % (i+1, len(filenames), src_file))
             else:
@@ -326,7 +327,7 @@ def main(argv=None):
             sys.stderr.write(err + "\n")
             err_count += 1
 
-    if not quiet and err_count == 0:
+    if not QUIET and err_count == 0:
         print("completed")
 
     return 0
