@@ -103,7 +103,7 @@ def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[
         sx = 0
 
     # write array
-    rband.WriteRaster(0, 0, xsize, ysize, narray.tostring())
+    rband.WriteRaster(0, 0, xsize, ysize, narray.tobytes())
 
     # make sure that all data have been written
     dst_ds.FlushCache()
