@@ -31,10 +31,12 @@ quiet = 0
 USE_GDALWARP = True
 
 
-def translate_jpgis_gml(text, dest_file, driver, create_options=None, replace_nodata_by_zero=False):
+def translate_jpgis_gml(text, dest_file, output_format="GTiff", create_options=[], replace_nodata_by_zero=False):
     """translates JPGIS (GML) DEM file into a GDAL supported format (write access)."""
 
-    create_options = create_options or []
+    driver = gdal.GetDriverByName(output_format)
+    if driver is None:
+        return "Driver %s not found" % output_format
 
     # split document into 3 parts - header, body (tuple list) and footer
     header, body = text.split("<gml:tupleList>", 1)
@@ -119,9 +121,13 @@ def translate_jpgis_gml(text, dest_file, driver, create_options=None, replace_no
     return 0
 
 
-def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodata_by_zero=False):
+def translate_zip(src_file, dst_file, output_format="GTiff", create_options=[], replace_nodata_by_zero=False):
     if not os.path.isfile(src_file):
         return "Source is not a file: " + src_file
+
+    driver = gdal.GetDriverByName(output_format)
+    if driver is None:
+        return "Driver %s not found" % output_format
 
     # create temporary directory
     temp_dir = os.path.splitext(dst_file)[0] + "_temp" + datetime.datetime.today().strftime("%Y%m%d%H%M%S")
@@ -139,11 +145,12 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
         if name[-4:].lower() == ".xml" and not "meta" in name:
             tif_name = os.path.join(temp_dir, os.path.basename(name) + ".tif")
             with zf.open(name) as f:
-                translate_jpgis_gml(f.read().decode("utf-8"), tif_name, driver, create_options, replace_nodata_by_zero)
+                translate_jpgis_gml(f.read().decode("utf-8"), tif_name, replace_nodata_by_zero=replace_nodata_by_zero)
             demlist.append(tif_name)
         if not quiet and not verbose:
             progress((i + 1.) / len(namelist))
     zf.close()
+
     if len(demlist) == 0:
         return "Zip file includes no xml file: " + src_file
 
@@ -151,8 +158,8 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
         os.rename(demlist[0], dst_file)
     else:
         gdal_merge_ext = ""
-        gdal_merge_options = []
-        gdalwarp_options = []
+        gdal_merge_options = ["-of", output_format]
+        gdalwarp_options = list(gdal_merge_options)
 
         if os.name != "nt":   # nt: windows
             gdal_merge_ext = ".py"
@@ -164,8 +171,8 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
             gdalwarp_options += ["-q"]
 
         if not replace_nodata_by_zero:
-            gdal_merge_options += ["-a_nodata -9999"]
-            gdalwarp_options += ["-dstnodata -9999"]
+            gdal_merge_options += ["-a_nodata", "-9999"]
+            gdalwarp_options += ["-dstnodata", "-9999"]
 
         re_non_ascii = re.compile(r"[^\x20-\x7E]")
         if not USE_GDALWARP and re_non_ascii.search(src_file + dst_file) is None:
@@ -177,14 +184,14 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
 
             merge_cmd_args = ['gdal_merge' + gdal_merge_ext]
             merge_cmd_args += gdal_merge_options
-            merge_cmd_args += ['-o "{}"'.format(dst_file), '--optfile "{}"'.format(demlist_filename)]
+            merge_cmd_args += ['-o', dst_file, '--optfile', demlist_filename]
 
             # TODO: test on Linux
             # Wildcards cannot be used for arguments now. See http://trac.osgeo.org/gdal/ticket/4542 (2012/04/08)
         else:
             merge_cmd_args = ['gdalwarp']
             merge_cmd_args += gdalwarp_options
-            merge_cmd_args += ['"{}"'.format(os.path.join(temp_dir, "*.tif")), '"{}"'.format(dst_file)]
+            merge_cmd_args += [os.path.join(temp_dir, "*.tif"), dst_file]
 
         if not quiet:
             print("merging")
@@ -278,6 +285,7 @@ def main(argv=None):
         return "Driver %s not found" % args.format
 
     dst_ext = "." + (driver.GetMetadataItem(gdal.DMD_EXTENSIONS) or "unknown").split(" ")[0]
+
     err_count = 0
     for i, src_file in enumerate(filenames):
         if not quiet:
@@ -300,10 +308,10 @@ def main(argv=None):
         # translate zip/xml file
         err = 0
         if ext == ".zip":
-            err = translate_zip(src_file, dst_file, driver, [], args.replace_nodata_by_zero)
+            err = translate_zip(src_file, dst_file, args.format, create_options, args.replace_nodata_by_zero)
         elif ext == ".xml" and not "meta" in src_file:
             with open(src_file, "r", encoding="utf-8") as f:
-                err = translate_jpgis_gml(f.read(), dst_file, driver, [], args.replace_nodata_by_zero)
+                err = translate_jpgis_gml(f.read(), dst_file, args.format, create_options, args.replace_nodata_by_zero)
         else:
             err = "Not supported file: %s" % src_file
 
