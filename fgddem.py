@@ -6,12 +6,14 @@
 
 script_version = "0.9"
 
-import sys, os
 import datetime
+import os
+import sys
 import glob
 import numpy
 import re
 import shutil
+import subprocess
 from xml.dom import minidom
 import zipfile
 from osgeo import gdal
@@ -147,19 +149,23 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
     if len(demlist) == 1:
         os.rename(demlist[0], dst_file)
     else:
-        # create merge command
-        gdal_merge_options = ""
-        gdalwarp_options = ""
         gdal_merge_ext = ""
+        gdal_merge_options = []
+        gdalwarp_options = []
+
         if os.name != "nt":   # nt: windows
             gdal_merge_ext = ".py"
+
         if quiet:
-            gdal_merge_options += " -q"
+            gdal_merge_options += ["-q"]
+
         if not verbose:
-            gdalwarp_options += " -q"
+            gdalwarp_options += ["-q"]
+
         if not replace_nodata_by_zero:
-            gdal_merge_options += " -a_nodata -9999"
-            gdalwarp_options += " -dstnodata -9999"
+            gdal_merge_options += ["-a_nodata -9999"]
+            gdalwarp_options += ["-dstnodata -9999"]
+
         re_non_ascii = re.compile(r"[^\x20-\x7E]")
         if not USE_GDALWARP and re_non_ascii.search(src_file + dst_file) is None:
             # write demlist into a file
@@ -168,30 +174,32 @@ def translate_zip(src_file, dst_file, driver, create_options=None, replace_nodat
                 f.write("\n".join(demlist))
                 f.write("\n")
 
-            merge_command = 'gdal_merge%s%s -o "%s" --optfile "%s"' % (gdal_merge_ext,
-                                                                                                                             gdal_merge_options,
-                                                                                                                             dst_file,
-                                                                                                                             demlist_filename)
-            # TODO: testing in Linux
+            merge_cmd_args = ['gdal_merge' + gdal_merge_ext]
+            merge_cmd_args += gdal_merge_options
+            merge_cmd_args += ['-o "{}"'.format(dst_file), '--optfile "{}"'.format(demlist_filename)]
+
+            # TODO: test on Linux
             # Wildcards cannot be used for arguments now. See http://trac.osgeo.org/gdal/ticket/4542 (2012/04/08)
         else:
-            merge_command = 'gdalwarp%s "%s" "%s"' % (gdalwarp_options,
-                                                                                                os.path.join(temp_dir, "*.tif"),
-                                                                                                dst_file)
+            merge_cmd_args = ['gdalwarp']
+            merge_cmd_args += gdalwarp_options
+            merge_cmd_args += ['"{}"'.format(os.path.join(temp_dir, "*.tif")), '"{}"'.format(dst_file)]
 
-        # do merge
         if not quiet:
             print("merging")
             flush()
+
         if verbose:
-            print("execute %s" % merge_command)
-        os.system(merge_command)
+            print("execute %s" % " ".join(merge_cmd_args))
+
+        subprocess.run(merge_cmd_args)
 
     # remove temporary directory
     shutil.rmtree(temp_dir)
     if not quiet:
         print("temporary files removed\n")
         flush()
+
     return 0
 
 
